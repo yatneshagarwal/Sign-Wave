@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignWave - Real-time ISL Translation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                    neon: {
+                        teal: "var(--neon-teal)",
+                        magenta: "var(--neon-magenta)",
+                        amber: "var(--neon-amber)",
+                    }
+                },
+                fontFamily: {
+                    sans: ['Inter', 'system-ui', 'sans-serif'],
+                    mono: ['JetBrains Mono', 'monospace'],
+                }
+            },
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: 10 10 10;
+            --foreground: 250 250 250;
+            --card: 15 15 15;
+            --card-foreground: 250 250 250;
+            --primary: 20 184 166;
+            --primary-foreground: 255 255 255;
+            --secondary: 30 30 30;
+            --secondary-foreground: 250 250 250;
+            --muted: 25 25 25;
+            --muted-foreground: 161 161 170;
+            --accent: 217 70 239;
+            --accent-foreground: 255 255 255;
+            --destructive: 239 68 68;
+            --destructive-foreground: 255 255 255;
+            --border: 39 39 42;
+            --input: 39 39 42;
+            --ring: 20 184 166;
+            --radius: 0.5rem;
+            --neon-teal: 20 184 166;
+            --neon-magenta: 217 70 239;
+            --neon-amber: 245 158 11;
+        }
+
+        body {
+            cursor: none;
+            overflow-x: hidden;
+        }
+
+        .custom-cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border: 2px solid hsl(var(--neon-teal));
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            transition: all 0.15s ease;
+            box-shadow: 0 0 15px hsl(var(--neon-teal) / 0.5);
+        }
+
+        .custom-cursor.pointer {
+            width: 12px;
+            height: 12px;
+            background: hsl(var(--neon-teal));
+            border: none;
+            box-shadow: 0 0 20px hsl(var(--neon-teal) / 0.8);
+        }
+
+        .custom-cursor.listening {
+            width: 30px;
+            height: 30px;
+            background: radial-gradient(circle, hsl(var(--neon-teal) / 0.3), transparent 70%);
+            border: 2px solid hsl(var(--neon-teal));
+            animation: pulse-listening 1.5s infinite;
+        }
+
+        @keyframes pulse-listening {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 15px hsl(var(--neon-teal) / 0.5); }
+            50% { transform: scale(1.2); box-shadow: 0 0 25px hsl(var(--neon-teal) / 0.8); }
+        }
+
+        .gradient-border {
+            position: relative;
+            background: linear-gradient(135deg, hsl(var(--neon-teal)), hsl(var(--neon-magenta)), hsl(var(--neon-amber)));
+            padding: 2px;
+            border-radius: 12px;
+        }
+
+        .gradient-border > div {
+            background: hsl(var(--card));
+            border-radius: 10px;
+            height: 100%;
+        }
+
+        .scanning-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(45deg, transparent 30%, hsl(var(--neon-teal) / 0.1) 50%, transparent 70%);
+            animation: scan-sweep 2s infinite;
+            border-radius: 12px;
+        }
+
+        @keyframes scan-sweep {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(200%) rotate(45deg); }
+        }
+
+        .glow-effect {
+            box-shadow: 0 0 20px hsl(var(--neon-teal) / 0.3), 
+                        0 0 40px hsl(var(--neon-teal) / 0.1),
+                        inset 0 1px 0 hsl(var(--neon-teal) / 0.2);
+        }
+
+        .confidence-bar {
+            height: 4px;
+            background: linear-gradient(90deg, 
+                hsl(var(--destructive)) 0%, 
+                hsl(var(--neon-amber)) 50%, 
+                hsl(var(--neon-teal)) 100%);
+            border-radius: 2px;
+        }
+
+        .gesture-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: hsl(var(--neon-teal));
+            border-radius: 50%;
+            box-shadow: 0 0 10px hsl(var(--neon-teal) / 0.8);
+            animation: pulse-point 1s infinite;
+        }
+
+        @keyframes pulse-point {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.7; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-background text-foreground min-h-screen font-sans">
+    <!-- Custom Cursor -->
+    <div class="custom-cursor" id="customCursor"></div>
+
+    <!-- @COMPONENT: Header [navigation and controls] -->
+    <header class="sticky top-0 z-40 backdrop-blur-lg bg-background/80 border-b border-border">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-gradient-to-r from-neon-teal to-neon-magenta rounded-lg flex items-center justify-center">
+                        <i class="fas fa-wave-square text-white text-sm"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold bg-gradient-to-r from-neon-teal to-neon-magenta bg-clip-text text-transparent">SignWave</h1>
+                        <p class="text-xs text-muted-foreground">Breaking silence</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <!-- @STATE: selectedRegion:string = "MH" -->
+                    <select class="bg-card border border-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent" id="regionSelect">
+                        <option value="MH">Maharashtra</option>
+                        <option value="UP">Uttar Pradesh</option>
+                        <option value="KA">Karnataka</option>
+                        <option value="TN">Tamil Nadu</option>
+                        <option value="GJ">Gujarat</option>
+                    </select>
+                    
+                    <button class="p-2 hover:bg-secondary rounded-lg transition-colors" data-mock="true" title="High Contrast Mode">
+                        <i class="fas fa-contrast text-muted-foreground"></i>
+                    </button>
+                    
+                    <button class="p-2 hover:bg-secondary rounded-lg transition-colors" data-mock="true" title="Settings">
+                        <i class="fas fa-cog text-muted-foreground"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <!-- @END_COMPONENT: Header -->
+
+    <main class="container mx-auto px-4 py-8">
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- @COMPONENT: CameraSection [main video feed and controls] -->
+            <div class="lg:col-span-2">
+                <div class="gradient-border h-96 lg:h-[500px] relative">
+                    <div class="p-6 h-full flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold">Camera Feed</h2>
+                            <div class="flex items-center space-x-2">
+                                <!-- @STATE: isRecording:boolean = false -->
+                                <div class="flex items-center space-x-2 text-sm text-muted-foreground">
+                                    <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse" data-bind="cameraStatus"></div>
+                                    <span>Active</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Mock Camera Viewport -->
+                        <div class="flex-1 bg-black rounded-lg relative overflow-hidden glow-effect">
+                            <!-- Mock video feed background -->
+                            <!-- A person demonstrating sign language in front of a neutral background -->
+                            <img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&h=600" 
+                                 alt="Sign language demonstration" 
+                                 class="w-full h-full object-cover opacity-60" 
+                                 data-mock-image="true" 
+                                 data-implementation="Replace with live camera feed">
+                            
+                            <!-- Hand tracking overlay points -->
+                            <div class="gesture-point" style="top: 30%; left: 40%;"></div>
+                            <div class="gesture-point" style="top: 45%; left: 38%;"></div>
+                            <div class="gesture-point" style="top: 60%; left: 42%;"></div>
+                            <div class="gesture-point" style="top: 35%; left: 60%;"></div>
+                            <div class="gesture-point" style="top: 50%; left: 58%;"></div>
+                            
+                            <!-- @STATE: isScanning:boolean = false -->
+                            <div class="scanning-overlay" id="scanningOverlay" style="display: none;"></div>
+                            
+                            <!-- Gesture Detection Status -->
+                            <div class="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-lg p-3">
+                                <div class="flex items-center space-x-2 text-sm">
+                                    <i class="fas fa-hand-paper text-neon-teal"></i>
+                                    <span class="text-white" data-bind="gestureStatus">Ready to detect</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Progress Indicator -->
+                            <div class="absolute bottom-4 left-4 right-4">
+                                <div class="bg-black/50 backdrop-blur-sm rounded-lg p-3">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-white text-sm">Gesture Recognition</span>
+                                        <span class="text-white text-sm font-mono" data-bind="progress">0%</span>
+                                    </div>
+                                    <div class="w-full bg-gray-700 rounded-full h-2">
+                                        <div class="confidence-bar rounded-full transition-all duration-300" style="width: 0%" id="progressBar"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Camera Controls -->
+                        <div class="flex items-center justify-center space-x-4 mt-4">
+                            <button class="bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-lg font-medium transition-all hover:scale-105 glow-effect" 
+                                    id="startScanBtn" 
+                                    data-event="click:startGestureScanning">
+                                <i class="fas fa-play mr-2"></i>
+                                Start Scanning
+                            </button>
+                            
+                            <button class="bg-secondary hover:bg-secondary/90 text-secondary-foreground px-4 py-3 rounded-lg transition-all hover:scale-105" 
+                                    id="pauseBtn" 
+                                    data-event="click:pauseScanning" 
+                                    disabled>
+                                <i class="fas fa-pause"></i>
+                            </button>
+                            
+                            <button class="bg-destructive hover:bg-destructive/90 text-destructive-foreground px-4 py-3 rounded-lg transition-all hover:scale-105" 
+                                    id="stopBtn" 
+                                    data-event="click:stopScanning">
+                                <i class="fas fa-stop"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: CameraSection -->
+
+            <!-- @COMPONENT: TranslationPanel [output and controls] -->
+            <div class="space-y-6">
+                <!-- Live Translation Output -->
+                <div class="gradient-border">
+                    <div class="p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="fas fa-language mr-2 text-neon-magenta"></i>
+                            Translation
+                        </h3>
+                        
+                        <!-- @STATE: currentTranslation:string = "" -->
+                        <div class="bg-muted rounded-lg p-4 min-h-[120px] flex items-center justify-center text-center" id="translationOutput">
+                            <p class="text-muted-foreground italic" data-mock="true">Translation will appear here after gesture completion...</p>
+                        </div>
+                        
+                        <!-- Translation Confidence -->
+                        <div class="mt-3 hidden" id="confidenceSection">
+                            <div class="flex items-center justify-between text-sm mb-1">
+                                <span class="text-muted-foreground">Confidence Score</span>
+                                <span class="font-mono" data-bind="confidence">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-2">
+                                <div class="confidence-bar rounded-full transition-all duration-300" style="width: 0%" id="confidenceBar"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- TTS Controls -->
+                        <div class="mt-4 flex items-center justify-between">
+                            <button class="bg-accent hover:bg-accent/90 text-accent-foreground px-4 py-2 rounded-lg text-sm transition-all hover:scale-105" 
+                                    id="speakBtn" 
+                                    data-event="click:speakTranslation" 
+                                    disabled>
+                                <i class="fas fa-volume-up mr-2"></i>
+                                Speak
+                            </button>
+                            
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-volume-down text-muted-foreground"></i>
+                                <input type="range" min="0" max="100" value="70" class="accent-primary" id="volumeSlider">
+                                <i class="fas fa-volume-up text-muted-foreground"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Emergency Detection -->
+                <div class="gradient-border">
+                    <div class="p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="fas fa-exclamation-triangle mr-2 text-red-400"></i>
+                            Emergency Detection
+                        </h3>
+                        
+                        <div class="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                            <p class="text-sm text-red-200 mb-3">Emergency gestures will trigger immediate alerts</p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-muted-foreground">Status:</span>
+                                <span class="text-green-400 text-sm font-medium">Monitoring</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Translations -->
+                <div class="gradient-border">
+                    <div class="p-6">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center">
+                            <i class="fas fa-history mr-2 text-neon-amber"></i>
+                            History
+                        </h3>
+                        
+                        <!-- @MAP: recentTranslations.map(translation => ( -->
+                        <div class="space-y-3" id="historyList">
+                            <div class="bg-muted rounded-lg p-3 text-sm" data-mock="true">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-muted-foreground font-mono">14:32:15</span>
+                                    <span class="text-neon-teal text-xs">98%</span>
+                                </div>
+                                <p class="text-foreground">Hello, how are you?</p>
+                            </div>
+                            <div class="bg-muted rounded-lg p-3 text-sm" data-mock="true">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-muted-foreground font-mono">14:31:42</span>
+                                    <span class="text-neon-teal text-xs">95%</span>
+                                </div>
+                                <p class="text-foreground">I need help</p>
+                            </div>
+                            <div class="bg-muted rounded-lg p-3 text-sm" data-mock="true">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-muted-foreground font-mono">14:30:18</span>
+                                    <span class="text-neon-amber text-xs">87%</span>
+                                </div>
+                                <p class="text-foreground">Thank you</p>
+                            </div>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                </div>
+            </div>
+            <!-- @END_COMPONENT: TranslationPanel -->
+        </div>
+        
+        <!-- @COMPONENT: StatsPanel [performance metrics] -->
+        <div class="mt-8 grid md:grid-cols-4 gap-4">
+            <div class="bg-card border border-border rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-muted-foreground">Avg Latency</p>
+                        <p class="text-2xl font-bold text-neon-teal" data-bind="avgLatency">245ms</p>
+                    </div>
+                    <i class="fas fa-clock text-neon-teal text-xl"></i>
+                </div>
+            </div>
+            
+            <div class="bg-card border border-border rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-muted-foreground">Accuracy</p>
+                        <p class="text-2xl font-bold text-neon-magenta" data-bind="accuracy">94.2%</p>
+                    </div>
+                    <i class="fas fa-bullseye text-neon-magenta text-xl"></i>
+                </div>
+            </div>
+            
+            <div class="bg-card border border-border rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-muted-foreground">Gestures Today</p>
+                        <p class="text-2xl font-bold text-neon-amber" data-bind="gestureCount">127</p>
+                    </div>
+                    <i class="fas fa-hand-paper text-neon-amber text-xl"></i>
+                </div>
+            </div>
+            
+            <div class="bg-card border border-border rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-muted-foreground">Success Rate</p>
+                        <p class="text-2xl font-bold text-green-400" data-bind="successRate">91.8%</p>
+                    </div>
+                    <i class="fas fa-check-circle text-green-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <!-- @END_COMPONENT: StatsPanel -->
+    </main>
+
+    <!-- @COMPONENT: NotificationToast [feedback messages] -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+    <!-- @END_COMPONENT: NotificationToast -->
+
+    <script>
+        (function() {
+            // Custom cursor implementation
+            const cursor = document.getElementById('customCursor');
+            const interactiveElements = document.querySelectorAll('button, a, input, select, [data-interactive="true"]');
+            
+            document.addEventListener('mousemove', (e) => {
+                cursor.style.left = e.clientX + 'px';
+                cursor.style.top = e.clientY + 'px';
+            });
+            
+            interactiveElements.forEach(el => {
+                el.addEventListener('mouseenter', () => cursor.classList.add('pointer'));
+                el.addEventListener('mouseleave', () => cursor.classList.remove('pointer'));
+            });
+
+            // @STATE: isScanning:boolean = false
+            let isScanning = false;
+            let scanProgress = 0;
+            let scanInterval = null;
+            let gestureCompleted = false;
+            
+            // UI Elements
+            const startBtn = document.getElementById('startScanBtn');
+            const pauseBtn = document.getElementById('pauseBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const speakBtn = document.getElementById('speakBtn');
+            const progressBar = document.getElementById('progressBar');
+            const scanningOverlay = document.getElementById('scanningOverlay');
+            const translationOutput = document.getElementById('translationOutput');
+            const confidenceSection = document.getElementById('confidenceSection');
+            const confidenceBar = document.getElementById('confidenceBar');
+            
+            // Mock gesture data
+            const mockGestures = [
+                { text: "Hello, how are you?", confidence: 0.98, hindi: "नमस्ते, आप कैसे हैं?" },
+                { text: "Thank you very much", confidence: 0.95, hindi: "धन्यवाद" },
+                { text: "I need help please", confidence: 0.92, hindi: "कृपया मदद करें" },
+                { text: "Where is the bathroom?", confidence: 0.89, hindi: "बाथरूम कहाँ है?" },
+                { text: "Good morning", confidence: 0.96, hindi: "सुप्रभात" },
+                { text: "Emergency assistance needed", confidence: 0.99, hindi: "आपातकालीन सहायता चाहिए", emergency: true }
+            ];
+            
+            // Start gesture scanning
+            startBtn.addEventListener('click', () => {
+                if (!isScanning) {
+                    startScanning();
+                }
+            });
+            
+            // Pause scanning
+            pauseBtn.addEventListener('click', () => {
+                pauseScanning();
+            });
+            
+            // Stop scanning
+            stopBtn.addEventListener('click', () => {
+                stopScanning();
+            });
+            
+            // Speak translation
+            speakBtn.addEventListener('click', () => {
+                speakTranslation();
+            });
+            
+            function startScanning() {
+                isScanning = true;
+                gestureCompleted = false;
+                scanProgress = 0;
+                
+                // Update UI states
+                startBtn.disabled = true;
+                pauseBtn.disabled = false;
+                startBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Scanning...';
+                cursor.classList.add('listening');
+                scanningOverlay.style.display = 'block';
+                
+                // Simulate gesture detection progress
+                scanInterval = setInterval(() => {
+                    if (scanProgress < 100) {
+                        scanProgress += Math.random() * 15 + 5; // Random progress increment
+                        scanProgress = Math.min(scanProgress, 100);
+                        
+                        progressBar.style.width = scanProgress + '%';
+                        
+                        // Update gesture status
+                        if (scanProgress < 30) {
+                            updateGestureStatus('Detecting hands...');
+                        } else if (scanProgress < 70) {
+                            updateGestureStatus('Analyzing gesture...');
+                        } else if (scanProgress < 95) {
+                            updateGestureStatus('Processing translation...');
+                        } else {
+                            updateGestureStatus('Gesture completed!');
+                        }
+                    } else {
+                        // Gesture scan completed
+                        completeGesture();
+                    }
+                }, 100);
+                
+                showToast('Started gesture scanning', 'info');
+            }
+            
+            function completeGesture() {
+                clearInterval(scanInterval);
+                gestureCompleted = true;
+                
+                // Select random gesture
+                const randomGesture = mockGestures[Math.floor(Math.random() * mockGestures.length)];
+                
+                // Display translation
+                displayTranslation(randomGesture);
+                
+                // Auto-speak the translation
+                setTimeout(() => {
+                    speakTranslation(randomGesture.text);
+                }, 500);
+                
+                // Handle emergency detection
+                if (randomGesture.emergency) {
+                    handleEmergencyGesture(randomGesture);
+                }
+                
+                // Add to history
+                addToHistory(randomGesture);
+                
+                // Reset scanning state
+                resetScanningState();
+            }
+            
+            function pauseScanning() {
+                if (scanInterval) {
+                    clearInterval(scanInterval);
+                    isScanning = false;
+                    startBtn.disabled = false;
+                    pauseBtn.disabled = true;
+                    startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Resume';
+                    cursor.classList.remove('listening');
+                    showToast('Scanning paused', 'warning');
+                }
+            }
+            
+            function stopScanning() {
+                if (scanInterval) {
+                    clearInterval(scanInterval);
+                }
+                resetScanningState();
+                showToast('Scanning stopped', 'info');
+            }
+            
+            function resetScanningState() {
+                isScanning = false;
+                scanProgress = 0;
+                gestureCompleted = false;
+                
+                startBtn.disabled = false;
+                pauseBtn.disabled = true;
+                startBtn.innerHTML = '<i class="fas fa-play mr-2"></i>Start Scanning';
+                progressBar.style.width = '0%';
+                cursor.classList.remove('listening');
+                scanningOverlay.style.display = 'none';
+                updateGestureStatus('Ready to detect');
+            }
+            
+            function displayTranslation(gesture) {
+                const region = document.getElementById('regionSelect').value;
+                const displayText = region === 'MH' && gesture.hindi ? gesture.hindi : gesture.text;
+                
+                translationOutput.innerHTML = `
+                    <div class="text-left">
+                        <p class="text-lg font-medium text-foreground mb-2">${displayText}</p>
+                        ${gesture.text !== displayText ? `<p class="text-sm text-muted-foreground italic">${gesture.text}</p>` : ''}
+                    </div>
+                `;
+                
+                // Show confidence
+                confidenceSection.classList.remove('hidden');
+                confidenceBar.style.width = (gesture.confidence * 100) + '%';
+                document.querySelector('[data-bind="confidence"]').textContent = Math.round(gesture.confidence * 100) + '%';
+                
+                // Enable speak button
+                speakBtn.disabled = false;
+            }
+            
+            function speakTranslation(text = null) {
+                if (!text && translationOutput.textContent.includes('Translation will appear')) {
+                    return;
+                }
+                
+                // Use Web Speech API for TTS
+                if ('speechSynthesis' in window) {
+                    const utterance = new SpeechSynthesisUtterance(text || translationOutput.textContent);
+                    const volume = document.getElementById('volumeSlider').value / 100;
+                    
+                    utterance.volume = volume;
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.0;
+                    
+                    // Set language based on region
+                    const region = document.getElementById('regionSelect').value;
+                    utterance.lang = region === 'MH' ? 'hi-IN' : 'en-US';
+                    
+                    speechSynthesis.speak(utterance);
+                    
+                    showToast('Speaking translation...', 'success');
+                } else {
+                    showToast('Speech synthesis not supported', 'error');
+                }
+            }
+            
+            function handleEmergencyGesture(gesture) {
+                showToast('🚨 Emergency gesture detected! Alerting authorities...', 'error', 5000);
+                
+                // Flash emergency indicator
+                const emergencySection = document.querySelector('[data-mock="true"]').closest('.gradient-border');
+                emergencySection.style.animation = 'pulse 0.5s infinite alternate';
+                
+                setTimeout(() => {
+                    emergencySection.style.animation = '';
+                }, 3000);
+            }
+            
+            function addToHistory(gesture) {
+                const historyList = document.getElementById('historyList');
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', { hour12: false });
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'bg-muted rounded-lg p-3 text-sm';
+                historyItem.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-muted-foreground font-mono">${timeString}</span>
+                        <span class="text-neon-teal text-xs">${Math.round(gesture.confidence * 100)}%</span>
+                    </div>
+                    <p class="text-foreground">${gesture.text}</p>
+                `;
+                
+                historyList.insertBefore(historyItem, historyList.firstChild);
+                
+                // Keep only last 5 items
+                while (historyList.children.length > 5) {
+                    historyList.removeChild(historyList.lastChild);
+                }
+            }
+            
+            function updateGestureStatus(status) {
+                document.querySelector('[data-bind="gestureStatus"]').textContent = status;
+            }
+            
+            function showToast(message, type = 'info', duration = 3000) {
+                const toastContainer = document.getElementById('toastContainer');
+                const toast = document.createElement('div');
+                
+                const bgColor = {
+                    'info': 'bg-card border-border',
+                    'success': 'bg-green-900/50 border-green-500/50',
+                    'warning': 'bg-yellow-900/50 border-yellow-500/50',
+                    'error': 'bg-red-900/50 border-red-500/50'
+                }[type];
+                
+                const icon = {
+                    'info': 'fas fa-info-circle',
+                    'success': 'fas fa-check-circle',
+                    'warning': 'fas fa-exclamation-triangle',
+                    'error': 'fas fa-exclamation-circle'
+                }[type];
+                
+                toast.className = `${bgColor} border rounded-lg p-4 shadow-lg backdrop-blur-sm max-w-sm transform transition-all duration-300 translate-x-full opacity-0`;
+                toast.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <i class="${icon} text-lg"></i>
+                        <p class="text-sm font-medium flex-1">${message}</p>
+                        <button class="text-muted-foreground hover:text-foreground transition-colors" onclick="this.parentElement.parentElement.remove()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+                
+                toastContainer.appendChild(toast);
+                
+                // Animate in
+                setTimeout(() => {
+                    toast.style.transform = 'translateX(0)';
+                    toast.style.opacity = '1';
+                }, 100);
+                
+                // Auto remove
+                setTimeout(() => {
+                    toast.style.transform = 'translateX(100%)';
+                    toast.style.opacity = '0';
+                    setTimeout(() => {
+                        if (toast.parentElement) {
+                            toast.parentElement.removeChild(toast);
+                        }
+                    }, 300);
+                }, duration);
+            }
+            
+            // Simulate real-time metrics updates
+            setInterval(() => {
+                const latencyEl = document.querySelector('[data-bind="avgLatency"]');
+                const accuracyEl = document.querySelector('[data-bind="accuracy"]');
+                const countEl = document.querySelector('[data-bind="gestureCount"]');
+                const successEl = document.querySelector('[data-bind="successRate"]');
+                
+                if (isScanning) {
+                    // Simulate minor fluctuations
+                    const baseLatency = 245;
+                    const newLatency = baseLatency + Math.floor(Math.random() * 20 - 10);
+                    latencyEl.textContent = newLatency + 'ms';
+                    
+                    const baseAccuracy = 94.2;
+                    const newAccuracy = baseAccuracy + Math.random() * 2 - 1;
+                    accuracyEl.textContent = newAccuracy.toFixed(1) + '%';
+                }
+            }, 2000);
+            
+            // Initialize with camera permission request simulation
+            setTimeout(() => {
+                showToast('Camera access granted', 'success');
+            }, 1000);
+        })();
+    </script>
+</body>
+</html>

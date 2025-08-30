@@ -1,0 +1,222 @@
+# App Brief & Master Prompt — *SignWave*
+
+*Tagline:* “Breaking silence — real-time Indian Sign Language → Text & Speech, with style.”
+
+Below is a single, battle-tested **master prompt** and a set of companion prompts & specs you can hand to product teams, designers, AI engineers, or prompt-engineering pipelines. It’s deliberately exhaustive: product vision, unique features, UX & VFX directions, model behavior & few-shot examples, metrics, privacy guidance, dataset schema, deployment targets, and QA checks — **no code**. Use it as the single source-of-truth when building the app/website.
+
+---
+
+# 1) Master Product Prompt (what to give your whole team / AI product manager)
+
+> **Goal:** Build *SignWave*, an accessible, government-ready AI product (mobile + web) that translates Indian Sign Language (ISL) gestures into live text and natural speech. The product must be production-grade (privacy-first, auditable, low-latency), highly accurate for regional ISL variants, and include unique, implementable societal features (education, emergency access, public kiosks). UI must be modern/game-hacker/neo-noir with best-in-class animations, cursor & hover micro-interactions, VFX for feedback, and accessible typography/contrast. Deliver designs, UX flows, data pipelines, evaluation benchmarks, and an API contract for real-time integration into public services.
+
+**Must-haves (high level):**
+
+* Real-time video → ISL gesture detection → contextual interpretation → text + TTS.
+* Multi-modal fallback: when camera fails, allow glove/accelerometer input + manual classifier.
+* Confidence layer & human-in-the-loop (HITL) escalation for low-confidence translations.
+* Offline models for privacy-sensitive usage (on-device), cloud option for heavy models.
+* Government integration features: kiosk mode, emergency translator, public transport terminals, school deployable packages.
+* Delightful, animated interface with onboarding tutorial, gesture visualizer, and safety/consent flow.
+
+**Non-functional targets:** sub-300ms latency for on-device inference pipeline (gesture → label), privacy by default, MTBF and uptime targets for server components suitable for government deployment.
+
+---
+
+# 2) UX / UI / Graphics Prompt (for designers / generative visual models)
+
+> **Deliverable:** High-fidelity design system, interactive website prototype, and animation spec.
+
+**Style direction (single-sentence):** “Neo-noir hacker aesthetic meets friendly civic UI — deep charcoal backgrounds, neon gradients (teal → magenta → electric amber), soft-glow VFX, crisp geometric sans-serif, and tactile micro-interactions that feel like a polished game UI but remain calm and accessible.”
+
+**Assets & details to request:**
+
+* Logo/brand lockup + color tokens with WCAG contrast checks.
+* Primary typeface (modern geometric sans) + accessible fallbacks; font sizes and line heights tuned for readability in public kiosks.
+* Motion library: cursor trails, reactive particle VFX when gestures recognized, progress bloom for live inference, subtle shake for failure states. Provide Framer Motion-style easing tokens (spring/soft).
+* Cursor & hover: custom cursor with 3 states (default ring, targeted pointer when over interactive region, “listening” orb when camera active). Hover states animate in 120–180ms with transform + glow.
+* Microcopy & onboarding: friendly tutorial showing 10 core ISL poses animated in-loop (0.8s to 1.2s cycles) with 3D-silhouette shadow behind the hand model.
+* Accessibility: high-contrast theme toggle, large-text mode, voice control, captions, keyboard-only flow.
+* Provide Lottie / SVG animation exports for each micro-interaction and a CSS animation guide (keyframes & suggestions) — no code but exact animation timings, easing, and states.
+
+---
+
+# 3) Core Unique Features (things “others won’t think of”)
+
+1. **Contextual Scene Awareness:** Combine gesture recognition with scene context (object detection + OCR) so the system can disambiguate signs that depend on objects (e.g., “bank” vs “money”) and translate with context-aware phrasing.
+2. **Region Mode:** User selects region/state and the app adapts to regional ISL variants and slang via a small region-specific model module.
+3. **Emotion Overlay:** Infer signer emotional tone (calm, urgent, frustrated) non-intrusively from facial expression & motion; add subtle UI VFX so listeners get emotional context in TTS prosody.
+4. **Legislative Toolkit:** One-click “GovDeploy” mode producing audit logs, anonymized transcripts, and compliance reports (for accessibility law compliance).
+5. **Emergency Auto-Bridge:** If emergency keyword detected (medical/emergency signs), auto-call predefined emergency services, display location-aware script for the responder, and generate an audio prompt in local language.
+6. **Gesture Rehearsal + Learning Mode:** Interactive visual feedback (skeleton overlay with accuracy heatmap) for ISL learners; gamified streaks & leaderboards for classroom deployments.
+7. **Signed-Search:** Index recorded videos with recognized signs as metadata to allow search by sign or phrase across records (privacy controls).
+8. **Public Kiosk Mode:** Tamper-proof interface with hardware camera calibrations and adaptive lighting compensation for noisy public environments.
+9. **Explainable Translation:** For each translated phrase produce expandable “why” metadata: which frames contributed, confidence per sign, and alternative translations.
+10. **Cross-Mode Mirror:** Two-device pairing where one device displays animated avatar reproducing detected signs in a clean, stylized avatar to teach or clarify.
+
+---
+
+# 4) AI / Prompting Spec for the Core Multimodal Model (system-level prompt + few-shot)
+
+> **System Instruction (for the multimodal model stack that maps video → ISL label → natural language):**
+> “You are an ISL translation engine. Input: continuous short video frames of a single signer (RGB) along with optional audio, location/region tag, and last-uttered context. Output: a time-stamped sequence of detected ISL signs (canonical label + timestamp range), a single fluent natural-language sentence in Hindi/English/regional language capturing intent, a confidence score per sign and for the final sentence, and explanation tokens (short bullet list showing which frames influenced which sign). Prioritize literal fidelity to ISL; prefer conservative translation when ambiguous and flag low-confidence spans. When emergency signs or healthcare/legal requests are detected, mark urgent=true and escalate via the HITL API.”
+
+**Few-shot examples (use these in the prompt context/staging):**
+
+1. Input: short clip of signer performing signs for “water” (hand-to-mouth repeated), region=UP
+   Output:
+
+   * Detected signs: \[{label: “WATER\_DRINK”, start: 0.12s, end: 0.95s, confidence: 0.98}]
+   * Text: “पीने का पानी चाहिए।” / “I need drinking water.”
+   * Confidence\_overall: 0.98
+   * Explanation: “hand-to-mouth repeated motion frames 14–30 matched template WATER\_DRINK.”
+
+2. Input: clip with sign ambiguous between “help” and “please”, low lighting, region=MH
+   Output:
+
+   * Detected signs: \[{label: “HELP? (ambiguous)”, start: 0.10s, end: 0.85s, confidence: 0.55}]
+   * Text: “(uncertain) क्या मदद चाहिए?” / “(uncertain) Do you need help?”
+   * Confidence\_overall: 0.55
+   * Explanation: “facial expression unclear; recommend clarification prompt or human-in-loop.”
+
+**Prompting behavior rules (enforceable):**
+
+* If average confidence < 0.65, generate clarifying prompt for user (onscreen and TTS): “Did you mean X or Y?” and enable quick-select corrections.
+* Always include timestamps for every detected sign.
+* Produce both literal translation (word-for-word) and contextual natural rendering; label which is which.
+* Support language switch: output in English, Hindi, or regional language matched to user preference, but store canonical labels in ISL label space.
+
+---
+
+# 5) TTS & Prosody Prompt (for speech engine)
+
+> **TTS Instruction:** Render translated text in the user’s language with prosody matching inferred emotion (if emotion overlay present). For urgent flags, use short clipped speech with higher pitch and faster rate; for calm statements, use warmer, slower prosody. Provide multiple voice personas (formal, friendly, neutral) selectable by admin.
+
+**Example TTS cue:**
+
+* Input: “I need a doctor” + emotion=urgent → voice: “expressive\_male\_urgent”, rate=1.15x, pitch=+3%.
+
+---
+
+# 6) Dataset & Annotation Schema (for data engineers / procurement)
+
+**Data types to collect:**
+
+* RGB video clips (multiple resolutions), depth if available, some accelerometer/glove streams optional.
+* Multiple signers across age, gender, skin tones, lighting, clothing, backgrounds.
+* Regional variants labelled (state/province).
+* Context images for scene-aware disambiguation (optional).
+
+**Annotation schema (JSON):**
+
+```json
+{
+  "video_id": "uuid",
+  "region": "MH",
+  "signer_id": "anon-id",
+  "annotations": [
+    {
+      "label": "WATER_DRINK",
+      "start_frame": 14,
+      "end_frame": 30,
+      "confidence": 0.0,
+      "literal_translations": ["drink water"],
+      "contextual_translations": ["I need drinking water"]
+    }
+  ],
+  "lighting": "low",
+  "background": "public_kiosk",
+  "consent_signed": true
+}
+```
+
+**Annotation rules:** timestamp every atomic sign with start/end, mark co-articulation, mark facial expression tokens (eyes, mouth), and mark ambiguous spans.
+
+**Ethics & privacy:** obtain explicit informed consent; store raw video only if user opts in; enable on-device-only pipelines; anonymize and blur faces in datasets used for public research unless explicit consent.
+
+---
+
+# 7) Evaluation & QA Metrics
+
+* **Sign Accuracy (Top-1):** target ≥ 92% on held-out standardized ISL benchmark.
+* **Phrase Accuracy (BLEU/ROUGE):** target BLEU ≥ 0.80 for short phrases after contextual rendering.
+* **Latency:** inference (frame → label) median ≤ 200–300ms on reference device (modern midrange mobile). End-to-end (capture → TTS) ≤ 800ms cloud, ≤ 400ms on-device.
+* **Robustness tests:** lighting extremes, occlusion, multiple people, background motion.
+* **Fairness:** equal accuracy across skin tones, genders, ages — measure parity gap < 3%.
+* **Human-in-the-loop failure recovery:** rate of successful clarification → corrected translation ≥ 85%.
+
+---
+
+# 8) API & Integration Contract (what designers/devs should expect)
+
+**Real-time WebSocket API (conceptual fields only):**
+
+* `client -> server` frames: {video\_frame\_base64, timestamp, device\_meta, region\_tag}
+* `server -> client` responses (streamed): {signs: \[ {label, start, end, confidence} ], sentence, literal\_sentence, confidence\_overall, explanation\_fragments, urgent\_flag}
+
+**Admin endpoints:**
+
+* `GET /audit/transcripts?from=&to=` returns anonymized transcripts with timestamps and confidence scores for audits.
+
+---
+
+# 9) Privacy, Safety & Government Readiness
+
+* **Privacy-first:** default on-device processing; cloud only with explicit consent. Provide toggle and plain-language privacy notice in onboarding.
+* **Data minimization:** do not store raw video unless necessary; store tokenized labels and short hashed snippets for audits.
+* **Audit logs:** tamper-evident logs for government deployments (timestamped, hashed).
+* **Accessibility compliance:** WCAG 2.2, accessibility testing with real ISL users.
+* **Legal:** Data Processing Agreements (DPA), local privacy laws (e.g., India’s rules), and export-control compliance.
+
+---
+
+# 10) Deployment & Maintenance
+
+* **Edge model for kiosks and mobiles** (quantized model for CPU/NPU inference).
+* **Cloud model for complex contextual interpretation** (scalable microservices with auto-scaling).
+* **Monitoring:** real-time telemetry for latency, accuracy drift, and fairness metrics.
+* **Model retrain pipeline:** scheduled batches + human review for drift, with easy rollback.
+
+---
+
+# 11) Example User Journeys (short)
+
+* **Public Kiosk Emergency:** User signs “ambulance” → app auto-detects urgent flag, reads out phrase to attendant, prompts for location share, calls emergency with recorded transcript.
+* **Classroom Learning:** Teacher enables “Learning Mode” → students see color heatmap overlay on their hand to improve accuracy; system gives score & tips.
+* **Gov Portal Integration:** Disabled person uses SignWave in a municipal office; translation logs are added to official forms, with audit hashes.
+
+---
+
+# 12) Sample Marketing / App Store Copy (short)
+
+> “SignWave — the AI translator that turns Indian Sign Language into clear text and natural speech — in real time. Built for inclusion, built for scale. On-device privacy, cloud intelligence, and government-ready features for public deployment.”
+
+---
+
+# 13) Prompts You Can Drop Into LLMs or Teams (short set)
+
+* **Product brief for designers:** “Design a neo-noir civic UI for SignWave with accessible typography, neon gradient tokens (teal → magenta → amber), motion tokens: hover 120ms, click 80ms, listening orb animation 900ms loop, and Lottie loops for each tutorial pose.”
+* **Prompt for motion spec:** “Produce a Lottie sequence for hand recognition success: 3-stage bloom (small → medium → fade) with particle burst that follows the motion centroid; duration \~600ms; easing: cubic-bezier(.22,1,.36,1).”
+* **Prompt for model researchers:** “Create a multimodal training regimen combining RGB video and face+hand keypoints, using contrastive pretraining to align signer motion with canonical ISL labels; include synthetic augmentation for lighting and occlusion.”
+* **Prompt for TTS tuning:** “Tune prosody for urgency vs calm. Urgent: shorter pauses, slightly higher pitch, 1.1x speed.”
+
+---
+
+# 14) Quick UX copy examples (for UI)
+
+* Listening indicator: “Listening… show your hands clearly in the frame.”
+* Low confidence: “I’m not sure — did you mean ‘help’ or ‘please’?”
+* Emergency detected: “Emergency sign detected. Call emergency services?” \[Call] \[Cancel]
+
+---
+
+# 15) Final Quick Checklist (deliverables to ask from a team)
+
+* Product spec doc + prioritized roadmap (MVP: real-time recognition, TTS, confidence UI, HITL).
+* Design system with motion tokens + Lottie files + prototypes.
+* Annotated dataset + labeling guidelines.
+* Model architecture proposal + latency benchmarks.
+* WebSocket API spec + sample message formats.
+* Privacy & gov deployment playbook.
+
+---
